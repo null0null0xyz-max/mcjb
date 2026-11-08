@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: minecraft-control-panel
+    name: minecraft-control-panel-admin
     runtime: node
     plan: free
     buildCommand: npm ci
@@ -12,10 +12,30 @@ services:
       - key: SESSION_SECRET
         generateValue: true
       - key: MC_SSH_HOST
-        sync: false
+        value: ssh.instabox.sh
       - key: MC_SSH_PORT
         value: "2222"
       - key: MC_SSH_USER
+        value: ibssh_dzmjejohaufzhj3b5qrciin6zu
+      - key: MC_SSH_PRIVATE_KEY_B64
         sync: false
-      - key: MC_SSH_PRIVATE_KEY
+  - type: web
+    name: minecraft-server-launcher
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: PUBLIC_ONLY
+        value: "true"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: MC_SSH_HOST
+        value: ssh.instabox.sh
+      - key: MC_SSH_PORT
+        value: "2222"
+      - key: MC_SSH_USER
+        value: ibssh_dzmjejohaufzhj3b5qrciin6zu
+      - key: MC_SSH_PRIVATE_KEY_B64
         sync: false
