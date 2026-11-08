@@ -1,1 +1,83 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Minecraft Control</title><style>body{font:16px system-ui;background:#10141d;color:#e8eef8;max-width:900px;margin:28px auto;padding:0 18px}main{background:#181f2b;border:1px solid #2b384c;border-radius:16px;padding:24px}input,button{font:inherit;border-radius:9px;padding:10px 13px;border:1px solid #40516b;background:#111722;color:#fff}button{cursor:pointer;background:#2867d8;border:0;margin:4px}.danger{background:#a84343}.muted{color:#98a8be}.tabs{margin:18px 0 8px;border-bottom:1px solid #334258;padding-bottom:8px}pre{background:#0b0f16;padding:14px;border-radius:10px;white-space:pre-wrap;min-height:100px;max-height:480px;overflow:auto}.card{background:#202a39;border-radius:12px;padding:14px;margin:10px 0}</style></head><body><main><h1>Minecraft Control</h1><p class="muted" id="mode">Панель управления сервером</p><section id="login"><input id="pw" type="password" placeholder="Пароль админ-панели"><button onclick="login()">Войти</button></section><section id="public" hidden><div class="card"><b>Сервер выключен?</b><p class="muted">Эта страница может только запустить его.</p><button onclick="startPublic()">Запустить сервер</button></div></section><section id="admin" hidden><div class="tabs"><button onclick="status()">Статус</button><button onclick="load('players')">Игроки</button><button onclick="load('plugins')">Плагины</button><button onclick="load('worlds')">Миры/диск</button><button onclick="load('logs')">Логи</button></div><p><button onclick="action('start')">Запустить</button><button onclick="action('restart')">Перезапустить</button><button class="danger" onclick="action('stop')">Остановить</button><button onclick="logout()">Выйти</button></p><div class="card"><b>Безопасные команды</b><input id="cmd" placeholder="list, tps, save-all, say ..."><button onclick="command()">Отправить</button></div><pre id="out">Выберите раздел.</pre></section></main><script>const $=x=>document.getElementById(x);async function api(u,o={}){let r=await fetch(u,{headers:{'Content-Type':'application/json'},...o});let j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error||`HTTP ${r.status}`);return j}async function boot(){try{let h=await api('/healthz');if(h.mode==='public-launcher'){$('login').hidden=true;$('public').hidden=false;$('mode').textContent='Публичный запуск без доступа к админским функциям'}}catch(e){}}async function login(){try{await api('/api/login',{method:'POST',body:JSON.stringify({password:$('pw').value})});$('login').hidden=true;$('admin').hidden=false;status()}catch(e){$('out').textContent=e.message}}async function status(){try{$('out').textContent=(await api('/api/status')).output}catch(e){$('out').textContent=e.message}}async function load(x){try{$('out').textContent=(await api('/api/'+x)).output}catch(e){$('out').textContent=e.message}}async function action(a){$('out').textContent='Выполняется…';try{$('out').textContent=(await api('/api/server/'+a,{method:'POST'})).output||'Команда выполнена';setTimeout(status,1200)}catch(e){$('out').textContent=e.message}}async function command(){try{$('out').textContent=(await api('/api/command',{method:'POST',body:JSON.stringify({command:$('cmd').value})})).output||'Отправлено'}catch(e){$('out').textContent=e.message}}async function startPublic(){try{$('public').querySelector('button').disabled=true;$('mode').textContent=(await api('/api/public/start',{method:'POST'})).output||'Сервер запускается'}catch(e){$('mode').textContent=e.message}}async function logout(){await api('/api/logout',{method:'POST'});location.reload()}boot()</script></body></html>
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Minecraft Control</title>
+  <style>
+    body{font:16px system-ui;background:#10141d;color:#e8eef8;max-width:900px;margin:28px auto;padding:0 18px}
+    main{background:#181f2b;border:1px solid #2b384c;border-radius:16px;padding:24px}
+    input,button{font:inherit;border-radius:9px;padding:10px 13px;border:1px solid #40516b;background:#111722;color:#fff}
+    button{cursor:pointer;background:#2867d8;border:0;margin:4px}
+    .danger{background:#a84343}.muted{color:#98a8be}.tabs{margin:18px 0 8px;border-bottom:1px solid #334258;padding-bottom:8px}
+    pre{background:#0b0f16;padding:14px;border-radius:10px;white-space:pre-wrap;min-height:100px;max-height:480px;overflow:auto}
+    .card{background:#202a39;border-radius:12px;padding:14px;margin:10px 0}
+    .help h2{margin-top:4px}.help h3{margin-bottom:6px;color:#bcd4ff}.help ol{padding-left:24px}.help code{background:#111722;border-radius:5px;padding:2px 5px;color:#d9e7ff}.help a{color:#8db7ff}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Minecraft Control</h1>
+    <p class="muted" id="mode">Панель управления сервером</p>
+
+    <section id="login">
+      <input id="pw" type="password" placeholder="Пароль админ-панели">
+      <button onclick="login()">Войти</button>
+    </section>
+
+    <section id="public" hidden>
+      <div class="card">
+        <b>Сервер выключен?</b>
+        <p class="muted">Эта страница может только запустить его.</p>
+        <button onclick="startPublic()">Запустить сервер</button>
+      </div>
+
+      <section class="card help" aria-labelledby="player-help-title">
+        <h2 id="player-help-title">Как обычному игроку зайти на сервер</h2>
+        <p>Если сервер был выключен, сначала нажмите <b>«Запустить сервер»</b> и подождите примерно 15–30 секунд.</p>
+
+        <h3>Java Edition</h3>
+        <ol>
+          <li>Откройте <b>Multiplayer → Add Server</b>.</li>
+          <li>В поле адреса укажите <code>jensen-resonant.tun.ply.gg</code>.</li>
+          <li>Порт отдельно указывать не нужно. Если клиент просит порт, используйте <code>25565</code>.</li>
+          <li>Версия Java может быть <b>1.21.11</b>. Другие версии могут подключаться через ViaVersion, но лучше использовать 1.21.11.</li>
+        </ol>
+
+        <h3>Bedrock Edition</h3>
+        <ol>
+          <li>Откройте <b>Play → Servers → Add Server</b>.</li>
+          <li>В поле адреса укажите <code>chords-gameboy.tun.ply.gg</code>.</li>
+          <li>В поле порта укажите <code>19132</code>.</li>
+          <li>Используйте актуальную стабильную версию Bedrock. Текущий Geyser принимает современные версии из диапазона <b>26.40–26.60</b>; старые версии Bedrock не поддерживаются и должны быть обновлены через официальный магазин устройства.</li>
+          <li>Для входа через Floodgate аккаунт Java Edition не нужен. При первом входе зарегистрируйтесь в AuthMe командой <code>/register ваш_пароль ваш_пароль</code>, а затем входите командой <code>/login ваш_пароль</code>.</li>
+        </ol>
+        <p class="muted">Официальная таблица совместимости Geyser: <a href="https://geysermc.org/wiki/geyser/supported-versions/" target="_blank" rel="noopener">Supported versions</a>.</p>
+        <p class="muted">Если появляется «Unable to connect to world», сначала обновите Bedrock, проверьте порт <code>19132</code> и убедитесь, что сервер был запущен кнопкой выше.</p>
+      </section>
+    </section>
+
+    <section id="admin" hidden>
+      <div class="tabs">
+        <button onclick="status()">Статус</button><button onclick="load('players')">Игроки</button><button onclick="load('plugins')">Плагины</button><button onclick="load('worlds')">Миры/диск</button><button onclick="load('logs')">Логи</button>
+      </div>
+      <p><button onclick="action('start')">Запустить</button><button onclick="action('restart')">Перезапустить</button><button class="danger" onclick="action('stop')">Остановить</button><button onclick="logout()">Выйти</button></p>
+      <div class="card"><b>Безопасные команды</b><input id="cmd" placeholder="list, tps, save-all, say ..."><button onclick="command()">Отправить</button></div>
+      <pre id="out">Выберите раздел.</pre>
+    </section>
+  </main>
+  <script>
+    const $=x=>document.getElementById(x);
+    async function api(u,o={}){let r=await fetch(u,{headers:{'Content-Type':'application/json'},...o});let j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error||`HTTP ${r.status}`);return j}
+    async function boot(){try{let h=await api('/healthz');if(h.mode==='public-launcher'){$('login').hidden=true;$('public').hidden=false;$('mode').textContent='Публичный запуск без доступа к админским функциям'}}catch(e){}}
+    async function login(){try{await api('/api/login',{method:'POST',body:JSON.stringify({password:$('pw').value})});$('login').hidden=true;$('admin').hidden=false;status()}catch(e){$('out').textContent=e.message}}
+    async function status(){try{$('out').textContent=(await api('/api/status')).output}catch(e){$('out').textContent=e.message}}
+    async function load(x){try{$('out').textContent=(await api('/api/'+x)).output}catch(e){$('out').textContent=e.message}}
+    async function action(a){$('out').textContent='Выполняется…';try{$('out').textContent=(await api('/api/server/'+a,{method:'POST'})).output||'Команда выполнена';setTimeout(status,1200)}catch(e){$('out').textContent=e.message}}
+    async function command(){try{$('out').textContent=(await api('/api/command',{method:'POST',body:JSON.stringify({command:$('cmd').value})})).output||'Отправлено'}catch(e){$('out').textContent=e.message}}
+    async function startPublic(){try{$('public').querySelector('button').disabled=true;$('mode').textContent=(await api('/api/public/start',{method:'POST'})).output||'Сервер запускается'}catch(e){$('mode').textContent=e.message}}
+    async function logout(){await api('/api/logout',{method:'POST'});location.reload()}
+    boot()
+  </script>
+</body>
+</html>
