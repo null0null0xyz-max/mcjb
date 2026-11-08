@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: minecraft-control-panel
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: PANEL_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: MC_SSH_HOST
+        sync: false
+      - key: MC_SSH_PORT
+        value: "2222"
+      - key: MC_SSH_USER
+        sync: false
+      - key: MC_SSH_PRIVATE_KEY
+        sync: false
