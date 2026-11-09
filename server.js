@@ -29,16 +29,35 @@ function safeName(value){ const name=String(value||'').trim(); if(!/^[A-Za-z0-9_
 function q(value){ return `'${String(value).replaceAll("'","'\\''")}'`; }
 function rcon(command){ return `python3 /opt/minecraft/rcon-client.py ${q(command)}`; }
 function remotePython(code){ return `python3 -c ${q(code)}`; }
+function proxySquaremap(req,res){
+  const conn = new Client(); let done=false;
+  const fail = e => { if(done)return; done=true; try{conn.end()}catch{}; if(!res.headersSent)res.status(502).send(`Карта временно недоступна: ${e.message}`); else res.destroy(); };
+  conn.on('ready',()=>conn.forwardOut('127.0.0.1',0,'127.0.0.1',8080,(e,stream)=>{
+    if(e)return fail(e);
+    let header=Buffer.alloc(0); let parsed=false;
+    stream.on('data',chunk=>{
+      if(parsed){res.write(chunk);return;}
+      header=Buffer.concat([header,chunk]); const i=header.indexOf('\r\n\r\n');
+      if(i<0)return;
+      parsed=true; const text=header.subarray(0,i).toString(); const lines=text.split('\r\n'); const status=Number((lines[0].match(/\s(\d{3})\s/)||[])[1]||502); res.status(status);
+      for(const line of lines.slice(1)){const n=line.indexOf(':');if(n>0){const k=line.slice(0,n).toLowerCase();if(['connection','transfer-encoding','content-length','content-type','cache-control','etag','last-modified'].includes(k))res.setHeader(k,line.slice(n+1).trim())}}
+      res.write(header.subarray(i+4));
+    }).on('end',()=>{done=true;res.end();conn.end()}).on('error',fail);
+    const path=(req.path||'/')+(req.originalUrl.includes('?')?`?${req.originalUrl.split('?')[1]}`:'');
+    stream.write(`GET ${path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n`);
+  })).on('error',fail).connect({host:process.env.MC_SSH_HOST,port:Number(process.env.MC_SSH_PORT||2222),username:process.env.MC_SSH_USER,privateKey:Buffer.from(process.env.MC_SSH_PRIVATE_KEY_B64||'','base64').toString('utf8'),readyTimeout:15000});
+}
 
 app.post('/api/login',(req,res)=>{if(!process.env.PANEL_PASSWORD||req.body.password!==process.env.PANEL_PASSWORD)return res.status(401).json({error:'Неверный пароль'});req.session.authenticated=true;res.json({ok:true})});
 app.post('/api/logout',(req,res)=>req.session.destroy(()=>res.json({ok:true})));
 app.get('/api/status',auth,(req,res)=>run(res,"printf 'Сервис: '; systemctl is-active minecraft || true; printf '\\nUptime: '; uptime -p; printf '\\nПамять: '; free -h | awk 'NR==2{print $3 \" / \" $2}'; printf '\\nДиск: '; df -h /opt/minecraft | awk 'NR==2{print $3 \" / \" $2 \" (\" $5 \")\"}'; printf '\\nJava/Paper: '; pgrep -af 'paper.jar' | head -1 || true"));
+app.use('/map',auth,proxySquaremap);
 app.get('/api/players',auth,(req,res)=>run(res,remotePython("import sqlite3,json; c=sqlite3.connect('/opt/minecraft/plugins/AuthMe/authme.db'); c.row_factory=sqlite3.Row; rows=[dict(r) for r in c.execute('select username,realname,lastlogin,x,y,z,world,isLogged from authme order by lastlogin desc')]; print(json.dumps(rows,ensure_ascii=False))")));
 app.get('/api/players/recent',auth,(req,res)=>run(res,`${rcon('list')}; echo; echo 'Последние события:'; journalctl -u minecraft -n 300 --no-pager | grep -E 'joined the game|left the game' | tail -n 50 || true`));
 app.get('/api/logs',auth,(req,res)=>run(res,'journalctl -u minecraft -n 180 --no-pager'));
 app.get('/api/plugins',auth,(req,res)=>run(res,"find /opt/minecraft/plugins -maxdepth 1 -type f -name '*.jar' -printf '%f\\n' | sort; printf '\\nOptional modules:\\n'; for p in CoreProtect BlueMap Plan SuperVanish spark; do test -e /opt/minecraft/plugins/$p -o -e /opt/minecraft/plugins/$p.jar && echo \"$p: installed\" || echo \"$p: not installed\"; done"));
-app.get('/api/worlds',auth,(req,res)=>run(res,"du -sh /opt/minecraft/world* 2>/dev/null || true; printf '\\nMap viewers:\\n'; find /opt/minecraft -maxdepth 3 -type f -iname '*bluemap*' -o -iname '*map*.html' 2>/dev/null | head -20"));
-app.get('/api/diagnostics',auth,(req,res)=>run(res,"printf 'CoreProtect: '; test -e /opt/minecraft/plugins/CoreProtect -o -e /opt/minecraft/plugins/CoreProtect.jar && echo installed || echo missing; printf 'BlueMap: '; test -e /opt/minecraft/plugins/BlueMap -o -e /opt/minecraft/plugins/BlueMap.jar && echo installed || echo missing; printf 'Plan: '; test -e /opt/minecraft/plugins/Plan -o -e /opt/minecraft/plugins/Plan.jar && echo installed || echo missing; printf 'Vanish: '; test -e /opt/minecraft/plugins/SuperVanish -o -e /opt/minecraft/plugins/SuperVanish.jar && echo installed || echo missing; printf '\\nServer port: '; ss -lntup | grep -E ':25565|:19132' || true"));
+app.get('/api/worlds',auth,(req,res)=>run(res,"du -sh /opt/minecraft/world* 2>/dev/null || true; printf '\\nMap viewers:\\n'; find /opt/minecraft/plugins/squaremap/web -maxdepth 2 -type f -iname '*.png' -o -iname 'index.html' 2>/dev/null | head -20; printf '\\nMap web: '; ss -lntup | grep ':8080' || true"));
+app.get('/api/diagnostics',auth,(req,res)=>run(res,"printf 'CoreProtect: '; test -e /opt/minecraft/plugins/CoreProtect -o -e /opt/minecraft/plugins/CoreProtect.jar && echo installed || echo missing; printf 'squaremap: '; test -e /opt/minecraft/plugins/squaremap -o -e /opt/minecraft/plugins/squaremap*.jar && echo installed || echo missing; printf 'Plan: '; test -e /opt/minecraft/plugins/Plan -o -e /opt/minecraft/plugins/Plan.jar && echo installed || echo missing; printf 'Vanish: '; test -e /opt/minecraft/plugins/SuperVanish -o -e /opt/minecraft/plugins/SuperVanish.jar && echo installed || echo missing; printf '\\nServer port: '; ss -lntup | grep -E ':25565|:19132|:8080' || true"));
 app.get('/api/chunks',auth,(req,res)=>run(res,`${rcon('paper chunkinfo')}; echo; ${rcon('forceload query')}`));
 app.get('/api/player/:player/inventory',auth,(req,res)=>{let p;try{p=safeName(req.params.player)}catch(e){return res.status(400).json({error:e.message})}run(res,`echo 'Инвентарь игрока ${p} (игрок должен быть онлайн):'; ${rcon(`data get entity ${p} Inventory`)}`)});
 app.get('/api/player/:player/enderchest',auth,(req,res)=>{let p;try{p=safeName(req.params.player)}catch(e){return res.status(400).json({error:e.message})}run(res,`echo 'Эндер-сундук игрока ${p} (игрок должен быть онлайн):'; ${rcon(`data get entity ${p} EnderItems`)}`)});
